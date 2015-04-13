@@ -3,14 +3,14 @@
 
 """This module  is used to calculate the taxes for shopping cart of goods.
 
-The Cart class consumes a string or unicode representation of a shopping list, 
-calculatures applicable sales taxes on the items, then formats a receipt of the 
+The Cart class consumes a string or unicode representation of a shopping list,
+calculatures applicable sales taxes on the items, then formats a receipt of the
 purchases
 
 It internally represents the goods as instances of the Item class
 
-command-line use of this module will take a list of file descriptors as 
-arguments and return a formated recipt for each input. The file 
+command-line use of this module will take a list of file descriptors as
+arguments and return a formated recipt for each input. The file
 descriptors should point to ASCII or UTF-8 encoded string representations
 of shopping carts of the format below:
 
@@ -30,11 +30,14 @@ Input 3:
 1 box of imported chocolates at 11.25
 
 Empty lines delimit seperate carts,
-lines with begining with the word "input" are ignored. 
+lines with begining with the word "input" are ignored.
 """
 
 from decimal import Decimal, ROUND_CEILING
+import re
 import codecs
+
+input_pattern = re.compile(u"(.+?)\s(.+)\s(at\s)(.+)", re.UNICODE)
 
 # questionable, but best given the input
 _TAX_EXEMPT_GOODS = ["book", "pill", "chocolate"]
@@ -79,23 +82,23 @@ class Item:
     """
 
     def __init__(self, item):
-        if not item or not item.strip():
-            raise ValueError('Basket must contain valid purchases')
-        tokens = item.split()
-        # first and last are quantity and price respectively
-        self.quantity = Decimal(tokens[0])
+        groups = match_input(item.strip())
+        self.quantity = Decimal(groups[0])
         if self.quantity < 0:
             raise ValueError("Quantity cannot be negative")
-        self.unit_price = Decimal(tokens[-1])
+        self.name = groups[1]
+        self.unit_price = Decimal(groups[-1])
         if self.unit_price < 0:
             raise ValueError("Price of items cannot be negative")
-        self.imported = is_item_imported(item)
-        self.tax_exempt = is_item_tax_exempt(item)
-        #output expects colon and adjusted price
-        self.string_rep = item.replace(" at " + tokens[-1], ": " + str(self.get_item_price()))
+        self.imported = is_item_imported(self.name)
+        self.tax_exempt = is_item_tax_exempt(self.name)
+        # output should have colon in place of 'at' and price adjusted for
+        # quantity and taxes
+        self.string_rep = groups[0] + ' ' + \
+            groups[1] + ': ' + str(self.get_item_price())
 
     def get_tax_rate(self):
-        """Calculates amount of taxes charged given what is known about 
+        """Calculates amount of taxes charged given what is known about
         this item being tax exempt or imported
         """
         taxes = Decimal('0')
@@ -106,12 +109,15 @@ class Item:
         return taxes
 
     def get_tax_amount(self):
-        untaxed_cost = (self.quantity * self.unit_price).quantize(Decimal('0.01'))
-        sales_tax = (untaxed_cost * self.get_tax_rate()).quantize(Decimal('0.01'))
+        untaxed_cost = (
+            self.quantity * self.unit_price).quantize(Decimal('0.01'))
+        sales_tax = (
+            untaxed_cost * self.get_tax_rate()).quantize(Decimal('0.01'))
         return apply_rounding(sales_tax)
 
     def get_item_price(self):
-        untaxed_cost = (self.quantity * self.unit_price).quantize(Decimal('0.01'))
+        untaxed_cost = (
+            self.quantity * self.unit_price).quantize(Decimal('0.01'))
         return untaxed_cost + self.get_tax_amount()
 
     def __str__(self):
@@ -139,10 +145,11 @@ def is_item_tax_exempt(item):
             return True
     return False
 
+
 def apply_rounding(number, precision=Decimal('0.05')):
     """Applies rounding according to:
-    The rounding rules for sales tax are that for a tax rate of n%, 
-    a shelf price of p contains (np/100 rounded up to the nearest 0.05) 
+    The rounding rules for sales tax are that for a tax rate of n%,
+    a shelf price of p contains (np/100 rounded up to the nearest 0.05)
     amount of sales tax."""
     # catchall in case a float sneaks by
     number = Decimal(number)
@@ -152,10 +159,19 @@ def apply_rounding(number, precision=Decimal('0.05')):
     return (rounding * precision).quantize(Decimal('0.01'))
 
 
+def match_input(string):
+    """Validates input looks like a well-formed shopping cart item, returns chunked input"""
+    # catchall in case a float sneaks by
+    valid = input_pattern.match(string)
+    if not valid:
+        raise ValueError(
+            "Input is not well-formed. Items should take the form of a single line containing a quantity, name of the item, the word 'at' then the price")
+    return valid.groups()
+
 
 def parse_files(filenames):
     """
-    function that iterates over a list of filenames, treating each as 
+    function that iterates over a list of filenames, treating each as
     cart(s) and printing receipts
     """
     stdout = ""

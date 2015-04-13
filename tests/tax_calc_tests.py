@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import unittest
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from docs.tax_calc import *
 
 
@@ -14,7 +14,7 @@ class TestItem(unittest.TestCase):
     input_invalid_quantity = "-2 imported bottle of perfume at 27.99\n"
     input_invalid_price = "2 imported bottle of perfume at -27.99\n"
     input_malformed = "dfasg<shdga<dssfhadfsgx gsg dfsg"
-    input_utf8 = u"1 book ät 12.49\n"
+    input_utf8 = u"1 book about the letter äääääää at 12.49\n"
 
     def test_item_sunny_day_tax_exempt(self):
         item = Item(self.input_tax_exempt)
@@ -22,7 +22,7 @@ class TestItem(unittest.TestCase):
         self.assertEqual(item.unit_price, Decimal('12.49'))
         self.assertEqual(item.tax_exempt, True)
         self.assertEqual(item.imported, False)
-        self.assertEqual(str(item), "1 book: 12.49\n")
+        self.assertEqual(str(item), "1 book: 12.49")
 
     def test_item_sunny_day_imported(self):
         item = Item(self.input_imported)
@@ -30,7 +30,7 @@ class TestItem(unittest.TestCase):
         self.assertEqual(item.unit_price, Decimal('27.99'))
         self.assertEqual(item.tax_exempt, False)
         self.assertEqual(item.imported, True)
-        self.assertEqual(str(item), "1 imported bottle of perfume: 32.19\n")
+        self.assertEqual(str(item), "1 imported bottle of perfume: 32.19")
 
     def test_item_sunny_day_multiple(self):
         item = Item(self.input_multiple)
@@ -38,7 +38,7 @@ class TestItem(unittest.TestCase):
         self.assertEqual(item.unit_price, Decimal('27.99'))
         self.assertEqual(item.tax_exempt, False)
         self.assertEqual(item.imported, True)
-        self.assertEqual(str(item), "2 imported bottle of perfume: 64.38\n")
+        self.assertEqual(str(item), "2 imported bottle of perfume: 64.38")
 
     def test_item_sunny_day_no_trailing_newline(self):
         item = Item(self.input_no_trailing_newline)
@@ -54,18 +54,19 @@ class TestItem(unittest.TestCase):
         self.assertEqual(item.unit_price, Decimal('12.49'))
         self.assertEqual(item.tax_exempt, True)
         self.assertEqual(item.imported, False)
-        self.assertEqual(str(item), "1.5 book: 18.74\n")
+        self.assertEqual(str(item), "1.5 book: 18.74")
 
+    # Cart should not be able to feed None into Item
     def test_item_from_none(self):
-        with self.assertRaisesRegexp(ValueError, "Basket must contain valid purchases"):
+        with self.assertRaisesRegexp(AttributeError, "'NoneType' object has no attribute 'strip'"):
             item = Item(None)
 
     def test_item_from_empty(self):
-        with self.assertRaisesRegexp(ValueError, "Basket must contain valid purchases"):
+        with self.assertRaisesRegexp(ValueError, "Input is not well-formed. Items should take the form of a single line containing a quantity, name of the item, the word 'at' then the price"):
             item = Item("")
 
     def test_item_from_blank(self):
-        with self.assertRaisesRegexp(ValueError, "Basket must contain valid purchases"):
+        with self.assertRaisesRegexp(ValueError, "Input is not well-formed. Items should take the form of a single line containing a quantity, name of the item, the word 'at' then the price"):
             item = Item("\t\n ")
 
     def test_item_invalid_price(self):
@@ -77,7 +78,7 @@ class TestItem(unittest.TestCase):
             item = Item(self.input_invalid_price)
 
     def test_item_malformed(self):
-        with self.assertRaisesRegexp(InvalidOperation, "Invalid literal for Decimal"):
+        with self.assertRaisesRegexp(ValueError, "Input is not well-formed. Items should take the form of a single line containing a quantity, name of the item, the word 'at' then the price"):
             item = Item(self.input_malformed)
 
     def test_item_utf8(self):
@@ -86,7 +87,8 @@ class TestItem(unittest.TestCase):
         self.assertEqual(item.unit_price, Decimal('12.49'))
         self.assertEqual(item.tax_exempt, True)
         self.assertEqual(item.imported, False)
-        self.assertEqual(unicode(item), u"1 book ät 12.49\n")
+        self.assertEqual(
+            unicode(item), u"1 book about the letter äääääää: 12.49")
 
     def test_get_tax_rate_imported(self):
         item = Item(self.input_imported)
@@ -227,6 +229,32 @@ class TestModuleFunctions(unittest.TestCase):
     expectationutf8 = u"Output 1:\n1 book: 12.49\n1 music CD: 16.49\n1 chocolate bar: 0.85\nSales Taxes: 1.50\nTotal: 29.83\nOutput 2:\n1 imported box of chocolates: 10.50\n1 imported bottle of perfume: 54.65\nSales Taxes: 7.65\nTotal: 65.15\nOutput 3:\n1 imported bottle of perfume: 32.19\n1 bottle of perfume: 20.89\n1 päcket of heädache pills: 9.75\n1 box of imported chocolates: 11.85\nSales Taxes: 6.70\nTotal: 74.68\n"
     input_tax_exempt = "1 book at 12.49\n"
     input_imported = "1 imported bottle of perfume at 27.99\n"
+    input_malformed = "dgf<sh<dsfzdfg"
+    input_negative = "-1 thing at -2.00"
+
+    def test_is_match_input_sunny_day(self):
+        self.assertEqual(
+            match_input(self.input_tax_exempt), ('1', 'book', 'at ', '12.49'))
+
+    def test_is_match_input_bigger_name(self):
+        self.assertEqual(match_input(self.input_imported),
+                         ('1', 'imported bottle of perfume', 'at ', '27.99'))
+
+    def test_is_match_input_blank(self):
+        with self.assertRaisesRegexp(ValueError, "Input is not well-formed. Items should take the form of a single line containing a quantity, name of the item, the word 'at' then the price"):
+            match_input("\t \n")
+
+    def test_is_match_input_none(self):
+        with self.assertRaisesRegexp(TypeError, "expected string or buffer"):
+            match_input(None)
+
+    def test_is_match_input_malformed(self):
+        with self.assertRaisesRegexp(ValueError, "Input is not well-formed. Items should take the form of a single line containing a quantity, name of the item, the word 'at' then the price"):
+            match_input(self.input_malformed)
+
+    def test_is_match_input_negative(self):
+        self.assertEqual(
+            match_input(self.input_negative), ('-1', 'thing', 'at ', '-2.00'))
 
     def test_is_item_tax_exempt_true(self):
         self.assertTrue(is_item_tax_exempt(self.input_tax_exempt))
