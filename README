@@ -2,6 +2,8 @@ Requirements: Python, only core library used (sys, decimal, codec)
 
 Running unit tests is best done through nose, with the coverage module (requirements.txt included)
 
+Flake8 used for pre-commit hook
+
 Unit tests:
 
 /tax_calc$ nosetests --with-coverage
